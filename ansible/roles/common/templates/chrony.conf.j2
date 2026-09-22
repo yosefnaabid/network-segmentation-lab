@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+# NTP del lab: el firewall del segmento (spec §7). Sin pools publicos: la
+# salida NTP directa esta bloqueada para casi todos los segmentos.
+server {{ lab_ntp_server }} iburst
+driftfile /var/lib/chrony/drift
+makestep 1.0 3
+rtcsync

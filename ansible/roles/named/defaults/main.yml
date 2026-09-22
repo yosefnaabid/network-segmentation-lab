@@ -1,0 +1,13 @@
+---
+# Registros de la zona directa. La inversa solo cubre la red de SERVERS;
+# el resto de hosts fijos vive en otras subredes y de momento no la necesitan.
+named_zone_serial: 2026072501
+named_records:
+  - {name: srv-dns, ip: 10.10.20.10}
+  - {name: srv-app, ip: 10.10.20.20}
+  - {name: dmz-web, ip: 10.10.30.10}
+  - {name: jump01, ip: 10.10.50.10}
+named_reverse_zone: 20.10.10.in-addr.arpa
+named_reverse_records:
+  - {octet: "10", name: srv-dns}
+  - {octet: "20", name: srv-app}

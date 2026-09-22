@@ -1,0 +1,73 @@
+---
+- name: Instalar Samba
+  ansible.builtin.dnf:
+    name:
+      - samba
+      - samba-common-tools
+    state: present
+
+- name: Usuario local del recurso compartido
+  ansible.builtin.user:
+    name: "{{ samba_user }}"
+    shell: /sbin/nologin
+    create_home: false
+    state: present
+
+# Contexto SELinux del directorio: registrado en la politica (sefcontext) y
+# aplicado en la creacion (setype). Sin restorecon manual: el modulo file ya
+# fija el contexto y sefcontext lo hace sobrevivir a un relabel.
+- name: Registrar el contexto samba_share_t del directorio
+  community.general.sefcontext:
+    target: "{{ samba_share_path }}(/.*)?"
+    setype: samba_share_t
+    state: present
+
+- name: Crear el directorio compartido con su contexto
+  ansible.builtin.file:
+    path: "{{ samba_share_path }}"
+    state: directory
+    owner: "{{ samba_user }}"
+    group: "{{ samba_user }}"
+    mode: "0770"
+    setype: samba_share_t
+
+- name: Configurar smb.conf
+  ansible.builtin.template:
+    src: smb.conf.j2
+    dest: /etc/samba/smb.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/bin/testparm -s %s
+  notify: Reiniciar smb
+
+# No hay modulo estable para las cuentas SMB: pdbedit consulta y smbpasswd
+# crea solo si falta, con changed_when honesto para mantener la idempotencia.
+- name: Comprobar si el usuario SMB ya existe
+  ansible.builtin.command:
+    cmd: /usr/bin/pdbedit -L
+  register: samba_pdb_list
+  changed_when: false
+
+- name: Dar de alta el usuario SMB (solo si falta)
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      printf '%s\n%s\n' "{{ vault_samba_password }}" "{{ vault_samba_password }}"
+      | /usr/bin/smbpasswd -s -a "{{ samba_user }}"
+  when: samba_user not in samba_pdb_list.stdout
+  changed_when: true
+  no_log: true
+
+- name: Servicio smb activo
+  ansible.builtin.service:
+    name: smb
+    state: started
+    enabled: true
+
+- name: Abrir samba en firewalld (segunda capa, ADR 0006)
+  ansible.posix.firewalld:
+    service: samba
+    permanent: true
+    immediate: true
+    state: enabled

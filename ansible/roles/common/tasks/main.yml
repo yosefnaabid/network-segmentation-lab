@@ -1,0 +1,111 @@
+---
+- name: Instalar los paquetes base
+  ansible.builtin.dnf:
+    name: "{{ common_packages }}"
+    state: present
+
+# --- SELinux: siempre en enforcing (regla dura del proyecto) ----------------
+- name: SELinux en modo enforcing con politica targeted
+  ansible.posix.selinux:
+    policy: targeted
+    state: enforcing
+
+# --- Agente QEMU: la garantia que la imagen -netseg ya aplica, declarada ----
+- name: Permitir guest-exec en la allow-list del agente QEMU
+  ansible.builtin.lineinfile:
+    path: /etc/sysconfig/qemu-ga
+    regexp: '^FILTER_RPC_ARGS='
+    line: 'FILTER_RPC_ARGS="--allow-rpcs={{ common_qga_allow_rpcs | replace(" ", "") }}"'
+  notify: Reiniciar qemu-guest-agent
+
+- name: Boolean SELinux para que los hijos de guest-exec corran sin confinar
+  ansible.posix.seboolean:
+    name: virt_qemu_ga_run_unconfined
+    state: true
+    persistent: true
+
+- name: Entrypoint del harness con el contexto unconfined del vendor
+  ansible.builtin.copy:
+    dest: /usr/local/sbin/netseg-agent-runner
+    owner: root
+    group: root
+    mode: "0755"
+    setype: virt_qemu_ga_unconfined_exec_t
+    content: |
+      #!/bin/bash
+      # Entrypoint del harness netseg (spec §8). Con el boolean
+      # virt_qemu_ga_run_unconfined activo, los hijos de guest-exec
+      # transicionan a un dominio sin confinar. SELinux sigue enforcing.
+      exec "$@"
+
+- name: Contexto persistente del entrypoint (sobrevive a relabels)
+  community.general.sefcontext:
+    target: /usr/local/sbin/netseg-agent-runner
+    setype: virt_qemu_ga_unconfined_exec_t
+    state: present
+
+- name: Servicio qemu-guest-agent activo
+  ansible.builtin.service:
+    name: qemu-guest-agent
+    state: started
+    enabled: true
+
+# --- NTP: el firewall del segmento es el servidor de hora (spec §7) ---------
+- name: Configurar chrony contra el firewall del segmento
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: /etc/chrony.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reiniciar chronyd
+
+- name: Servicio chronyd activo
+  ansible.builtin.service:
+    name: chronyd
+    state: started
+    enabled: true
+
+# --- Resolver: solo el firewall o srv-dns (ADR 0003) ------------------------
+- name: Impedir que NetworkManager gestione resolv.conf
+  ansible.builtin.copy:
+    dest: /etc/NetworkManager/conf.d/90-netseg-dns.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # netseg: resolv.conf lo gestiona Ansible, no NetworkManager (ADR 0003)
+      [main]
+      dns=none
+  notify: Recargar NetworkManager
+
+- name: Apuntar el resolver al DNS interno del lab
+  ansible.builtin.template:
+    src: resolv.conf.j2
+    dest: /etc/resolv.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+# --- firewalld: segunda capa de filtrado (ADR 0006) -------------------------
+- name: Servicio firewalld activo
+  ansible.builtin.service:
+    name: firewalld
+    state: started
+    enabled: true
+
+# --- Hardening base de sshd --------------------------------------------------
+- name: Endurecer sshd (solo claves, sin root)
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/90-netseg.conf
+    owner: root
+    group: root
+    mode: "0600"
+    validate: /usr/sbin/sshd -t -f %s
+    content: |
+      # netseg: hardening base (rol common)
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      X11Forwarding no
+  notify: Reiniciar sshd

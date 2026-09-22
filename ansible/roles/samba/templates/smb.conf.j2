@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+[global]
+    workgroup = LAB
+    server string = Recursos compartidos del laboratorio
+    security = user
+    map to guest = never
+    smb encrypt = desired
+    logging = systemd
+
+[{{ samba_share_name }}]
+    comment = Recurso compartido del departamento (flujo USERS -> srv-app:445)
+    path = {{ samba_share_path }}
+    browseable = yes
+    writable = yes
+    valid users = {{ samba_user }}

@@ -1,0 +1,5 @@
+# Dependencias de desarrollo: validador de flows, tests y linter de Python.
+pytest>=8
+PyYAML>=6
+jsonschema>=4.21
+ruff>=0.5

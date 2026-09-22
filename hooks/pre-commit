@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Hook de pre-commit del repo (git config core.hooksPath hooks).
+# Dos frenos: (1) ficheros que jamas deben versionarse, (2) exports de OPNsense
+# con secretos sin pasar por scripts/sanitize.py.
+set -euo pipefail
+
+fallo=0
+
+while IFS= read -r f; do
+  case "$f" in
+    *.tfstate*|*.netseg.env|.env|terraform/terraform.tfvars|ansible/group_vars/vault.yml)
+      echo "pre-commit: '$f' es un fichero de secretos/estado y no debe versionarse" >&2
+      fallo=1
+      ;;
+  esac
+done < <(git diff --cached --name-only --diff-filter=ACM)
+
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  if ! git show ":$f" | python3 scripts/sanitize.py --check -; then
+    echo "pre-commit: '$f' contiene secretos; ejecuta: python3 scripts/sanitize.py '$f'" >&2
+    fallo=1
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACM | grep -E '^opnsense/.*\.xml$' || true)
+
+exit $fallo

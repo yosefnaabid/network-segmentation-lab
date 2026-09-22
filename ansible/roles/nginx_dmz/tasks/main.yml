@@ -1,0 +1,57 @@
+---
+- name: Instalar nginx (AppStream)
+  ansible.builtin.dnf:
+    name: nginx
+    state: present
+
+- name: Portada minima que identifica el host
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: /usr/share/nginx/html/index.html
+    owner: root
+    group: root
+    mode: "0644"
+
+# El servicio publicado por NAT es HTTPS: sin certificado, el port forward de
+# 443 llegaria a un puerto cerrado. Autofirmado porque es un laboratorio.
+- name: Certificado autofirmado del servicio publicado
+  ansible.builtin.command:
+    cmd: >-
+      openssl req -x509 -nodes -newkey rsa:2048 -days 3650
+      -keyout /etc/pki/tls/private/dmz-web.key
+      -out /etc/pki/tls/certs/dmz-web.crt
+      -subj "/CN=dmz-web.{{ lab_domain }}"
+    creates: /etc/pki/tls/certs/dmz-web.crt
+
+- name: Servidor HTTPS de nginx
+  ansible.builtin.copy:
+    dest: /etc/nginx/conf.d/dmz-web-tls.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Gestionado por Ansible (rol nginx_dmz) - no editar a mano
+      server {
+          listen 443 ssl;
+          server_name dmz-web.{{ lab_domain }};
+          ssl_certificate     /etc/pki/tls/certs/dmz-web.crt;
+          ssl_certificate_key /etc/pki/tls/private/dmz-web.key;
+          root /usr/share/nginx/html;
+      }
+  notify: Recargar nginx
+
+- name: Servicio nginx activo
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+
+- name: Abrir http y https en firewalld (segunda capa, ADR 0006)
+  ansible.posix.firewalld:
+    service: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop:
+    - http
+    - https

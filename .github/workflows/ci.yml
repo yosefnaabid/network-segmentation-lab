@@ -1,0 +1,46 @@
+---
+# CI del laboratorio: valida codigo y esquema, sin tocar el lab (spec §12).
+name: ci
+
+"on":
+  push:
+  pull_request:
+
+jobs:
+  lint-y-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dependencias de Python
+        run: |
+          pip install -r requirements-dev.txt
+          pip install ansible-lint yamllint
+      - name: Colecciones de Ansible (ansible-lint no las trae; incidencia 10)
+        run: ansible-galaxy collection install -r ansible/requirements.yml
+      - name: Ruff
+        run: ruff check scripts tests
+      - name: Yamllint
+        run: yamllint .
+      - name: Ansible-lint
+        run: ansible-lint ansible
+      - name: Validacion de esquema de flows.yml
+        run: python scripts/validate_flows.py opnsense/flows.yml
+      - name: Tests unitarios (sin lab)
+        run: pytest tests -m "not lab" -q
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+      - name: terraform fmt
+        run: terraform -chdir=terraform fmt -check -recursive
+      - name: terraform validate
+        run: |
+          terraform -chdir=terraform init -backend=false -input=false
+          terraform -chdir=terraform validate

@@ -1,0 +1,47 @@
+// {{ ansible_managed }}
+// BIND autoritativo de {{ lab_domain }}. Solo responde a las redes del lab;
+// la recursion queda desactivada: para resolver Internet esta el forwarder
+// del firewall (ADR 0003).
+
+acl "lab" {
+{% for net in lab_networks %}
+    {{ net }};
+{% endfor %}
+    127.0.0.0/8;
+};
+
+options {
+    listen-on port 53 { 127.0.0.1; {{ ansible_host }}; };
+    listen-on-v6 port 53 { none; };
+    directory "/var/named";
+    dump-file "/var/named/data/cache_dump.db";
+    statistics-file "/var/named/data/named_stats.txt";
+    memstatistics-file "/var/named/data/named_mem_stats.txt";
+
+    allow-query { lab; };
+    recursion no;
+
+    dnssec-validation no;
+
+    pid-file "/run/named/named.pid";
+    session-keyfile "/run/named/session.key";
+};
+
+logging {
+    channel default_debug {
+        file "data/named.run";
+        severity dynamic;
+    };
+};
+
+zone "{{ lab_domain }}" IN {
+    type master;
+    file "db.{{ lab_domain }}";
+    allow-update { none; };
+};
+
+zone "{{ named_reverse_zone }}" IN {
+    type master;
+    file "db.{{ named_reverse_zone }}";
+    allow-update { none; };
+};

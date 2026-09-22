@@ -1,0 +1,48 @@
+---
+- name: Grupo de usuarios con SSH permitido
+  ansible.builtin.group:
+    name: "{{ bastion_ssh_group }}"
+    state: present
+
+- name: El usuario de gestion pertenece al grupo SSH
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: "{{ bastion_ssh_group }}"
+    append: true
+
+- name: Restringir sshd al grupo y subir el nivel de registro
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/80-bastion.conf
+    owner: root
+    group: root
+    mode: "0600"
+    validate: /usr/sbin/sshd -t -f %s
+    content: |
+      # netseg: bastion (rol bastion). Claves si o si; grupo cerrado; registro
+      # detallado para atribuir cada sesion (ADR 0004).
+      AllowGroups {{ bastion_ssh_group }}
+      LogLevel VERBOSE
+      MaxAuthTries 3
+      ClientAliveInterval 300
+      ClientAliveCountMax 2
+  notify: Reiniciar sshd bastion
+
+# Registro de sesiones: cada execve de una sesion interactiva queda en el
+# audit log. La evaluacion de tlog (grabacion completa de TTY) se decide en
+# fase 4, cuando el playbook se ejecute de verdad.
+- name: Reglas de auditoria de sesiones interactivas
+  ansible.builtin.copy:
+    dest: /etc/audit/rules.d/80-bastion.rules
+    owner: root
+    group: root
+    mode: "0600"
+    content: |
+      ## netseg: registro de sesiones del bastion
+      -a always,exit -F arch=b64 -S execve -F auid>=1000 -F auid!=unset -k bastion-exec
+  notify: Recargar reglas de auditd
+
+- name: Servicio auditd activo
+  ansible.builtin.service:
+    name: auditd
+    state: started
+    enabled: true

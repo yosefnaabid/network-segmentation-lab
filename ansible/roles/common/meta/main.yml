@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: Yosef
+  description: Base comun de los AlmaLinux del lab (NTP, resolver, SELinux, firewalld, agente)
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions: ["9"]
+  galaxy_tags: []
+dependencies: []

@@ -1,0 +1,12 @@
+---
+- name: Reiniciar sshd bastion
+  ansible.builtin.service:
+    name: sshd
+    state: restarted
+
+# auditd en RHEL no acepta systemctl reload: augenrules es la via oficial de
+# recargar las reglas (por eso hay un command aqui, documentado).
+- name: Recargar reglas de auditd
+  ansible.builtin.command:
+    cmd: /usr/sbin/augenrules --load
+  changed_when: true

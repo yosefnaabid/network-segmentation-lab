@@ -1,0 +1,14 @@
+---
+# Reglas de yamllint del repo. Base "default" con longitudes realistas
+# para inventarios y workflows.
+extends: default
+
+rules:
+  line-length:
+    max: 120
+  truthy:
+    allowed-values: ["true", "false"]
+
+ignore: |
+  .venv/
+  .terraform/

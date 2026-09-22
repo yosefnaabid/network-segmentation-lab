@@ -1,0 +1,17 @@
+
+# Artefactos locales de Python
+# Secretos y estado local: jamas en git
+*.tfstate*
+.env
+.netseg-fw.env
+.netseg-vpn/
+.netseg.env
+.pytest_cache/
+.ruff_cache/
+.terraform/
+.venv/
+__pycache__/
+ansible/group_vars/vault.yml
+opnsense/.plan-interfaces.json
+terraform.tfvars
+tests/.results/

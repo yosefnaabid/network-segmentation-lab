@@ -1,0 +1,37 @@
+---
+# Variables comunes del lab. Los SECRETOS van en group_vars/vault.yml
+# (cifrado con ansible-vault y fuera de git; ver vault.yml.example).
+
+ansible_user: ansible
+ansible_become: true
+
+# Dominio interno y resolucion: los clientes solo resuelven contra el
+# firewall (forwarder) o contra srv-dns (ADR 0003).
+lab_domain: lab.interno
+lab_dns_ip: 10.10.20.10
+
+# NTP: el firewall de cada segmento es el servidor de hora del lab (spec §7).
+lab_ntp_server: "{{ lab_gateway }}"
+
+# Redes del lab (para reglas de firewalld y ACLs de BIND).
+lab_networks:
+  - 10.10.10.0/24
+  - 10.10.20.0/24
+  - 10.10.30.0/24
+  - 10.10.40.0/24
+  - 10.10.50.0/24
+  - 10.10.99.0/24
+  - 10.10.60.0/24
+
+# PostgreSQL (srv-app): la web de la DMZ consulta host a host (flujo (3)).
+pg_app_db: webapp
+pg_app_user: webapp
+dmz_web_ip: 10.10.30.10
+
+# Samba (srv-app): recurso que da sentido al flujo (1).
+samba_share_name: compartido
+samba_share_path: /srv/compartido
+samba_user: usuario1
+
+# Bastion: unico acceso SSH a SERVERS (ADR 0004).
+bastion_ssh_group: sshusers

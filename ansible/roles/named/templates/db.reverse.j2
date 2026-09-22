@@ -1,0 +1,13 @@
+; {{ ansible_managed }}
+; Zona inversa {{ named_reverse_zone }}
+$TTL 3600
+@   IN SOA srv-dns.{{ lab_domain }}. hostmaster.{{ lab_domain }}. (
+        {{ named_zone_serial }} ; serial
+        3600       ; refresh
+        900        ; retry
+        604800     ; expire
+        300 )      ; ttl negativo
+    IN NS srv-dns.{{ lab_domain }}.
+{% for r in named_reverse_records %}
+{{ "%-4s"|format(r.octet) }} IN PTR {{ r.name }}.{{ lab_domain }}.
+{% endfor %}

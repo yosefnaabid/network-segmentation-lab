@@ -1,0 +1,177 @@
+---
+# flows.yml - fuente de verdad de la matriz de flujos (spec §5 y §6).
+#
+# Solo se declaran los ALLOW. Las denegaciones NO se escriben: se derivan por
+# producto cartesiano (origen x host destino x puertos de sondeo) restando lo
+# permitido. Anadir una clave "deny" es un error de esquema.
+#
+# Cada regla lleva su porque (reason), no su que. Las reglas del firewall y
+# los tests se generan desde este fichero; editarlas a mano es un bug.
+#
+# WAN es una palabra reservada (no un segmento): "dst: WAN" significa salida
+# a Internet, y "src: WAN" trafico entrante del exterior (lo simula ext01).
+# Nota NTP: el firewall es el servidor NTP del lab (spec §7); el 123/udp que
+# la matriz §5 lista bajo WAN se declara aqui tal cual y en fase 3 se decidira
+# si termina en el propio firewall (regla "This Firewall") o sale fuera.
+
+segments:
+  USERS: {vlan: 10, cidr: 10.10.10.0/24}
+  SERVERS: {vlan: 20, cidr: 10.10.20.0/24}
+  DMZ: {vlan: 30, cidr: 10.10.30.0/24}
+  IOT: {vlan: 40, cidr: 10.10.40.0/24}
+  MGMT: {vlan: 50, cidr: 10.10.50.0/24}
+  GUEST: {vlan: 99, cidr: 10.10.99.0/24}
+  VPN: {cidr: 10.10.60.0/24}
+
+hosts:
+  srv-dns: {segment: SERVERS, ip: 10.10.20.10}
+  srv-app: {segment: SERVERS, ip: 10.10.20.20}
+  dmz-web: {segment: DMZ, ip: 10.10.30.10}
+  jump01: {segment: MGMT, ip: 10.10.50.10}
+
+# Puertos con los que se sondea cada par origen/destino.
+probes:
+  ports: [22/tcp, 53/udp, 80/tcp, 443/tcp, 445/tcp, 3389/tcp, 5432/tcp, 161/udp]
+  icmp: true
+
+# Solo allow. Todo lo demas se espera bloqueado.
+#
+# Palabras reservadas para dst: WAN (Internet) y FIREWALL (los servicios del
+# propio cortafuegos). src admite un segmento, un host o una lista de segmentos.
+allow:
+  # -- Servicios del propio firewall (spec §7) ------------------------------
+  # Sin esto, la resolucion interna no funciona: los clientes preguntan al
+  # firewall y la politica por defecto se lo deniega.
+  - id: resolucion-contra-el-firewall
+    src: [USERS, SERVERS, DMZ, IOT, MGMT, GUEST]
+    dst: FIREWALL
+    ports: [53/udp, 53/tcp]
+    reason: "Resolucion de nombres contra el forwarder del lab, sin salir a DNS publico"
+
+  - id: gestion-del-firewall
+    src: WAN
+    dst: FIREWALL
+    ports: [8443/tcp]
+    reason: "Administracion del cortafuegos desde el nodo de control, en un puerto separado del 443 publicado"
+
+  - id: tunel-vpn-entrante
+    src: WAN
+    dst: FIREWALL
+    ports: [51820/udp]
+    reason: "Establecimiento del tunel de acceso remoto; el trafico de dentro se filtra aparte"
+
+  - id: hora-contra-el-firewall
+    src: [USERS, SERVERS, DMZ, IOT, MGMT, GUEST]
+    dst: FIREWALL
+    ports: [123/udp]
+    reason: "El firewall es el servidor horario del laboratorio y todos sincronizan con el"
+
+  # -- USERS ----------------------------------------------------------- (1)
+  - id: users-to-fileshare
+    src: USERS
+    dst: srv-app
+    ports: [445/tcp]
+    reason: "Acceso a recursos compartidos del departamento"
+
+  - id: users-to-internal-dns
+    src: USERS
+    dst: srv-dns
+    ports: [53/udp, 53/tcp]
+    reason: "Resolucion de nombres internos sin salir a DNS publico"
+
+  - id: users-to-published-web
+    src: USERS
+    dst: dmz-web
+    ports: [443/tcp]
+    reason: "Consumo del servicio web publicado; host a host porque la DMZ no es un cajon de sastre"
+
+  - id: users-to-internet
+    src: USERS
+    dst: WAN
+    ports: [80/tcp, 443/tcp]
+    reason: "Navegacion de los puestos de trabajo; DNS y NTP se quedan dentro del lab"
+
+  # -- SERVERS --------------------------------------------------------- (2)
+  - id: servers-egress
+    src: SERVERS
+    dst: WAN
+    ports: [80/tcp, 443/tcp, 123/udp]
+    reason: "Actualizaciones de paquetes y sincronizacion horaria; nada mas sale"
+
+  # -- DMZ ----------------------------------------------------------- (2)(3)
+  - id: dmz-egress
+    src: DMZ
+    dst: WAN
+    ports: [80/tcp, 443/tcp, 123/udp]
+    reason: "Actualizaciones de paquetes y sincronizacion horaria del host expuesto"
+
+  - id: dmz-to-database
+    src: dmz-web
+    dst: srv-app
+    ports: [5432/tcp]
+    reason: "La web publicada consulta su base de datos, host a host"
+
+  # -- IOT --------------------------------------------------------------- (4)
+  - id: iot-egress
+    src: IOT
+    dst: WAN
+    ports: [443/tcp, 123/udp]
+    reason: "Telemetria cifrada y hora; sin DNS externo: obligados a usar el resolver interno"
+
+  # -- MGMT (amplio pero por servicios: 22, 443, 3389, 161; jamas any->any) --
+  - id: mgmt-to-users
+    src: MGMT
+    dst: USERS
+    ports: [22/tcp, 443/tcp, 3389/tcp, 161/udp]
+    reason: "Soporte remoto y monitorizacion de los puestos desde administracion"
+
+  - id: mgmt-to-servers
+    src: MGMT
+    dst: SERVERS
+    ports: [22/tcp, 443/tcp, 3389/tcp, 161/udp]
+    reason: "Administracion y monitorizacion de los servicios internos (se registra todo)"
+
+  - id: mgmt-to-dmz
+    src: MGMT
+    dst: DMZ
+    ports: [22/tcp, 443/tcp, 3389/tcp, 161/udp]
+    reason: "Administracion del host expuesto sin abrirlo a nadie mas"
+
+  - id: mgmt-to-iot
+    src: MGMT
+    dst: IOT
+    ports: [22/tcp, 443/tcp, 3389/tcp, 161/udp]
+    reason: "Diagnostico de los dispositivos no confiables desde un unico punto"
+
+  - id: mgmt-to-guest
+    src: MGMT
+    dst: GUEST
+    ports: [22/tcp, 443/tcp, 3389/tcp, 161/udp]
+    reason: "Diagnostico puntual del segmento de invitados"
+
+  - id: mgmt-to-internet
+    src: MGMT
+    dst: WAN
+    ports: [80/tcp, 443/tcp]
+    reason: "Descarga de herramientas y documentacion desde el bastion"
+
+  # -- GUEST -------------------------------------------------------------- (5)
+  - id: guest-to-internet
+    src: GUEST
+    dst: WAN
+    ports: [80/tcp, 443/tcp]
+    reason: "Los invitados solo navegan; nada interno es alcanzable y el segmento aisla entre clientes"
+
+  # -- VPN (llega a MGMT y solo a MGMT; criterio de la fase 6) --------------
+  - id: vpn-to-mgmt
+    src: VPN
+    dst: MGMT
+    ports: [22/tcp, 443/tcp, 3389/tcp, 161/udp]
+    reason: "El acceso remoto aterriza en administracion y desde ahi se salta; nunca directo a los servicios"
+
+  # -- WAN entrante (port forward hacia la DMZ; lo verifica ext01) ----------
+  - id: wan-to-published-web
+    src: WAN
+    dst: dmz-web
+    ports: [80/tcp, 443/tcp]
+    reason: "Unica publicacion hacia Internet: la web de la DMZ via NAT"

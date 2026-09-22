@@ -1,0 +1,6 @@
+# {{ ansible_managed }}
+# Resolver del lab: DNS interno y, como respaldo, el forwarder del firewall.
+# El DNS externo directo esta bloqueado por politica (ADR 0003).
+search {{ lab_domain }}
+nameserver {{ lab_dns_ip }}
+nameserver {{ lab_gateway }}

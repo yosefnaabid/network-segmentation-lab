@@ -1,0 +1,53 @@
+---
+# Playbook principal (fase 4). Idempotencia obligatoria: la segunda pasada
+# debe terminar con changed=0, y eso se comprueba ejecutandolo (CONVENTIONS.md).
+- name: Base comun de todos los AlmaLinux
+  hosts: alma
+  become: true
+  # vault.yml no lleva nombre de grupo, asi que Ansible no lo carga solo:
+  # se declara aqui. El fichero esta cifrado y fuera de git (ver .example).
+  vars_files:
+    - group_vars/vault.yml
+  roles:
+    - common
+
+- name: DNS autoritativo de lab.interno
+  hosts: srv-dns
+  become: true
+  # vault.yml no lleva nombre de grupo, asi que Ansible no lo carga solo:
+  # se declara aqui. El fichero esta cifrado y fuera de git (ver .example).
+  vars_files:
+    - group_vars/vault.yml
+  roles:
+    - named
+
+- name: Base de datos y recurso compartido
+  hosts: srv-app
+  become: true
+  # vault.yml no lleva nombre de grupo, asi que Ansible no lo carga solo:
+  # se declara aqui. El fichero esta cifrado y fuera de git (ver .example).
+  vars_files:
+    - group_vars/vault.yml
+  roles:
+    - postgres
+    - samba
+
+- name: Web publicada en la DMZ
+  hosts: dmz-web
+  become: true
+  # vault.yml no lleva nombre de grupo, asi que Ansible no lo carga solo:
+  # se declara aqui. El fichero esta cifrado y fuera de git (ver .example).
+  vars_files:
+    - group_vars/vault.yml
+  roles:
+    - nginx_dmz
+
+- name: Bastion de administracion
+  hosts: jump01
+  become: true
+  # vault.yml no lleva nombre de grupo, asi que Ansible no lo carga solo:
+  # se declara aqui. El fichero esta cifrado y fuera de git (ver .example).
+  vars_files:
+    - group_vars/vault.yml
+  roles:
+    - bastion

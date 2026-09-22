@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "netseg/flows.schema.json",
+  "title": "Matriz de flujos del laboratorio (solo allow)",
+  "description": "Esquema de opnsense/flows.yml. Las denegaciones se derivan, no se declaran: no existe la clave 'deny'. WAN es palabra reservada para src/dst.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["segments", "hosts", "probes", "allow"],
+  "properties": {
+    "segments": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^(?!WAN$)[A-Z][A-Z0-9_]{1,15}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cidr"],
+        "properties": {
+          "vlan": {"type": "integer", "minimum": 1, "maximum": 4094},
+          "cidr": {"type": "string", "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"}
+        }
+      }
+    },
+    "hosts": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]{1,30}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["segment", "ip"],
+        "properties": {
+          "segment": {"type": "string"},
+          "ip": {"type": "string", "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}$"}
+        }
+      }
+    },
+    "probes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ports"],
+      "properties": {
+        "ports": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/portproto"}
+        },
+        "icmp": {"type": "boolean"}
+      }
+    },
+    "allow": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "src", "dst", "ports", "reason"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,50}$"},
+          "src": {
+            "oneOf": [
+              {"$ref": "#/$defs/endpoint"},
+              {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"$ref": "#/$defs/endpoint"}}
+            ]
+          },
+          "dst": {"$ref": "#/$defs/endpoint"},
+          "ports": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"$ref": "#/$defs/portproto"}
+          },
+          "icmp": {"type": "boolean"},
+          "reason": {"type": "string", "minLength": 15}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "portproto": {
+      "type": "string",
+      "pattern": "^([1-9][0-9]{0,4})/(tcp|udp)$"
+    },
+    "endpoint": {
+      "type": "string",
+      "description": "Nombre de segmento, nombre de host, o las palabras reservadas WAN (Internet) y FIREWALL (servicios del propio cortafuegos)",
+      "pattern": "^(WAN|FIREWALL|[A-Z][A-Z0-9_]{1,15}|[a-z][a-z0-9-]{1,30})$"
+    }
+  }
+}

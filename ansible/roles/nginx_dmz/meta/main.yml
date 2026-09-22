@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: Yosef
+  description: Nginx publicado por NAT desde la DMZ (unica exposicion a Internet del lab)
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions: ["9"]
+  galaxy_tags: []
+dependencies: []

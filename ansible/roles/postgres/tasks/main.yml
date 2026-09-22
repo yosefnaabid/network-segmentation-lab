@@ -1,0 +1,64 @@
+---
+- name: Instalar PostgreSQL
+  ansible.builtin.dnf:
+    name:
+      - postgresql-server
+      - postgresql
+      - python3-psycopg2
+    state: present
+
+# En la familia RHEL el initdb NO es automatico (ADR 0005). No existe modulo
+# para postgresql-setup: command con "creates" lo deja idempotente.
+- name: Inicializar el cluster de datos
+  ansible.builtin.command:
+    cmd: /usr/bin/postgresql-setup --initdb
+    creates: /var/lib/pgsql/data/PG_VERSION
+
+- name: Escuchar tambien en la IP del segmento
+  ansible.builtin.lineinfile:
+    path: /var/lib/pgsql/data/postgresql.conf
+    regexp: '^#?listen_addresses'
+    line: "listen_addresses = 'localhost,{{ ansible_host }}'"
+  notify: Reiniciar postgresql
+
+# Host a host: SOLO dmz-web puede autenticar contra la base de la web.
+- name: Autorizar a dmz-web en pg_hba (scram)
+  community.postgresql.postgresql_pg_hba:
+    dest: /var/lib/pgsql/data/pg_hba.conf
+    contype: host
+    databases: "{{ pg_app_db }}"
+    users: "{{ pg_app_user }}"
+    source: "{{ dmz_web_ip }}/32"
+    method: scram-sha-256
+    state: present
+  notify: Reiniciar postgresql
+
+- name: Servicio postgresql activo
+  ansible.builtin.service:
+    name: postgresql
+    state: started
+    enabled: true
+
+- name: Base de datos de la aplicacion
+  community.postgresql.postgresql_db:
+    name: "{{ pg_app_db }}"
+    state: present
+  become: true
+  become_user: postgres
+
+- name: Usuario de la aplicacion
+  community.postgresql.postgresql_user:
+    db: "{{ pg_app_db }}"
+    name: "{{ pg_app_user }}"
+    password: "{{ vault_pg_app_password }}"
+    state: present
+  become: true
+  become_user: postgres
+
+# Segunda capa (ADR 0006): 5432 abierto SOLO para la IP de dmz-web.
+- name: Abrir 5432 unicamente para dmz-web en firewalld
+  ansible.posix.firewalld:
+    rich_rule: 'rule family="ipv4" source address="{{ dmz_web_ip }}/32" port port="5432" protocol="tcp" accept'
+    permanent: true
+    immediate: true
+    state: enabled

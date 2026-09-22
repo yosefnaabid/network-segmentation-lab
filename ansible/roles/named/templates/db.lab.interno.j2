@@ -1,0 +1,13 @@
+; {{ ansible_managed }}
+; Zona directa de {{ lab_domain }}
+$TTL 3600
+@   IN SOA srv-dns.{{ lab_domain }}. hostmaster.{{ lab_domain }}. (
+        {{ named_zone_serial }} ; serial
+        3600       ; refresh
+        900        ; retry
+        604800     ; expire
+        300 )      ; ttl negativo
+    IN NS srv-dns.{{ lab_domain }}.
+{% for r in named_records %}
+{{ "%-12s"|format(r.name) }} IN A {{ r.ip }}
+{% endfor %}

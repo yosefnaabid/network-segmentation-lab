@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: Yosef
+  description: PostgreSQL para la web de la DMZ (flujo dmz-web -> srv-app:5432, host a host)
+  license: MIT
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions: ["9"]
+  galaxy_tags: []
+dependencies: []

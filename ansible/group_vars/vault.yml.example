@@ -1,0 +1,7 @@
+---
+# Plantilla de group_vars/vault.yml. El fichero real:
+#   1. se crea copiando este ejemplo,
+#   2. se cifra:  ansible-vault encrypt group_vars/vault.yml
+#   3. y JAMAS se versiona (esta en .gitignore).
+vault_pg_app_password: "cambiame-postgres"
+vault_samba_password: "cambiame-samba"
